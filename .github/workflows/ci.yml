@@ -19,7 +19,8 @@ jobs:
     - uses: actions/setup-go@v5
       with: {go-version: '1.26.x'}
     - run: go run ./cmd/migrate
-      env: {DATABASE_URL: postgres://digital_notary:test@localhost:5432/digital_notary?sslmode=disable}
+      env:
+        DATABASE_URL: "postgres://digital_notary:test@localhost:5432/digital_notary?sslmode=disable"
   test-and-build:
     runs-on: ubuntu-latest
     steps:
