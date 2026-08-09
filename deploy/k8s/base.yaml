@@ -1,0 +1,58 @@
+apiVersion: v1
+kind: Namespace
+metadata: {name: digital-notary}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: document-api, namespace: digital-notary}
+spec:
+  minReadySeconds: 5
+  replicas: 3
+  selector: {matchLabels: {app: document-api}}
+  template:
+    metadata:
+      labels: {app: document-api}
+      annotations:
+        vault.hashicorp.com/agent-inject: 'true'
+        vault.hashicorp.com/role: digital-notary-api
+        vault.hashicorp.com/agent-inject-secret-app.env: kv/data/digital-notary/api
+        vault.hashicorp.com/agent-inject-template-app.env: |
+          {{- with secret "kv/data/digital-notary/api" -}}
+          {{- range $k, $v := .Data.data }}{{ $k }}={{ $v }}
+          {{- end }}{{- end }}
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext: {seccompProfile: {type: RuntimeDefault}}
+      serviceAccountName: document-api
+      containers:
+      - name: api
+        image: ghcr.io/replace-me/digital-notary:latest
+        ports: [{containerPort: 8080}]
+        env: [{name: PORT, value: '8080'}, {name: VAULT_ENV_FILE, value: /vault/secrets/app.env}]
+        resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: '1', memory: 512Mi}}
+        securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, runAsNonRoot: true}
+        livenessProbe: {httpGet: {path: /healthz, port: 8080}}
+        readinessProbe: {httpGet: {path: /readyz, port: 8080}}
+        startupProbe: {httpGet: {path: /healthz, port: 8080}, failureThreshold: 30, periodSeconds: 2}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: document-api, namespace: digital-notary}
+spec: {selector: {app: document-api}, ports: [{port: 80, targetPort: 8080}]}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: document-api, namespace: digital-notary}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: api-default-deny, namespace: digital-notary}
+spec:
+  podSelector: {matchLabels: {app: document-api}}
+  policyTypes: [Ingress, Egress]
+  ingress: [{from: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: ingress-nginx}}}]}]
+  egress:
+  - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: data-zone}}}]
+    ports: [{protocol: TCP, port: 443}, {protocol: TCP, port: 5432}]
+  - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: vault}}}]
+    ports: [{protocol: TCP, port: 8200}]

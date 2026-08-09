@@ -1,0 +1,62 @@
+name: CI
+on: [push, pull_request]
+permissions: {contents: read, packages: write, id-token: write}
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/digital-notary
+jobs:
+  migrate-check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: {POSTGRES_DB: digital_notary, POSTGRES_USER: digital_notary, POSTGRES_PASSWORD: test}
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U digital_notary -d digital_notary"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-go@v5
+      with: {go-version: '1.26.x'}
+    - run: go run ./cmd/migrate
+      env: {DATABASE_URL: postgres://digital_notary:test@localhost:5432/digital_notary?sslmode=disable}
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-go@v5
+      with: {go-version: '1.26.x'}
+    - run: go mod tidy && git diff --exit-code -- go.mod go.sum
+    - run: go test ./...
+    - run: go test -race ./...
+    - name: Log in to GHCR
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      uses: docker/login-action@v3
+      with: {registry: ghcr.io, username: ${{ github.actor }}, password: ${{ secrets.GITHUB_TOKEN }}
+    - uses: docker/build-push-action@v6
+      with: {context: '.', push: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}, tags: ${{ env.IMAGE }}:${{ github.sha }}
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [test-and-build, migrate-check]
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+    - uses: actions/checkout@v4
+    - name: Authenticate to Kubernetes with OIDC
+      run: |
+        # Configure cloud-specific workload identity here; do not store kubeconfig in GitHub secrets.
+        kubectl create namespace digital-notary --dry-run=client -o yaml | kubectl apply -f -
+        sed "s#ghcr.io/replace-me/digital-notary:latest#${IMAGE}:${GITHUB_SHA}#g" deploy/k8s/migrate-job.yaml | kubectl create -f -
+        kubectl wait --for=condition=complete job -l app=digital-notary-migrate -n digital-notary --timeout=5m
+        kubectl apply -f deploy/k8s/base.yaml
+        kubectl apply -f deploy/k8s/availability.yaml
+        kubectl apply -f deploy/k8s/resource-guards.yaml
+        kubectl apply -f deploy/k8s/outbox-publisher.yaml
+        kubectl apply -f deploy/k8s/notification-worker.yaml
+        kubectl apply -f deploy/k8s/notification-dispatcher.yaml
+        kubectl apply -f deploy/k8s/cleanup-cronjob.yaml
+        kubectl -n digital-notary set image deployment/document-api api=${IMAGE}:${GITHUB_SHA}
+        kubectl -n digital-notary set image deployment/outbox-publisher publisher=${IMAGE}:${GITHUB_SHA}
+        kubectl -n digital-notary set image deployment/notification-worker worker=${IMAGE}:${GITHUB_SHA}
+        kubectl -n digital-notary set image deployment/notification-dispatcher dispatcher=${IMAGE}:${GITHUB_SHA}
+        kubectl -n digital-notary rollout status deployment/document-api --timeout=5m

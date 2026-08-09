@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- ../../k8s
+namespace: digital-notary-staging
+nameSuffix: -staging
+images:
+- name: ghcr.io/replace-me/digital-notary
+  newName: ghcr.io/replace-me/digital-notary
+  newTag: staging
+patches:
+- target: {kind: Deployment, name: document-api}
+  patch: |-
+    - op: replace
+      path: /spec/replicas
+      value: 1

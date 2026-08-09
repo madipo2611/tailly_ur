@@ -1,0 +1,30 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata: {name: digital-notary-cleanup, namespace: digital-notary}
+spec:
+  schedule: "17 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          annotations:
+            vault.hashicorp.com/agent-inject: 'true'
+            vault.hashicorp.com/role: digital-notary-api
+            vault.hashicorp.com/agent-inject-secret-app.env: kv/data/digital-notary/api
+            vault.hashicorp.com/agent-inject-template-app.env: |
+              {{- with secret "kv/data/digital-notary/api" -}}
+              {{- range $k, $v := .Data.data }}{{ $k }}={{ $v }}
+              {{- end }}{{- end }}
+        spec:
+          securityContext: {seccompProfile: {type: RuntimeDefault}}
+          restartPolicy: OnFailure
+          serviceAccountName: document-api
+          containers:
+          - name: cleanup
+            image: ghcr.io/replace-me/digital-notary:latest
+            command: ["/cleanup"]
+            env: [{name: VAULT_ENV_FILE, value: /vault/secrets/app.env}]
+            securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, runAsNonRoot: true}

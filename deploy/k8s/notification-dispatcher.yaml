@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: notification-dispatcher, namespace: digital-notary}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: notification-dispatcher}}
+  template:
+    metadata:
+      labels: {app: notification-dispatcher}
+      annotations:
+        vault.hashicorp.com/agent-inject: 'true'
+        vault.hashicorp.com/role: digital-notary-api
+        vault.hashicorp.com/agent-inject-secret-app.env: kv/data/digital-notary/api
+        vault.hashicorp.com/agent-inject-template-app.env: |
+          {{- with secret "kv/data/digital-notary/api" -}}
+          {{- range $k, $v := .Data.data }}{{ $k }}={{ $v }}
+          {{- end }}{{- end }}
+    spec:
+      securityContext: {seccompProfile: {type: RuntimeDefault}}
+      serviceAccountName: document-api
+      containers:
+      - name: dispatcher
+        image: ghcr.io/replace-me/digital-notary:latest
+        command: ["/notification-dispatcher"]
+        env: [{name: VAULT_ENV_FILE, value: /vault/secrets/app.env}]
+        securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, runAsNonRoot: true}

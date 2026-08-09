@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- ../../k8s
+namespace: digital-notary
+images:
+- name: ghcr.io/replace-me/digital-notary
+  newName: ghcr.io/replace-me/digital-notary
+  newTag: latest

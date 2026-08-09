@@ -1,0 +1,13 @@
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE TABLE users (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), phone text UNIQUE NOT NULL, identity_provider text NOT NULL, identity_subject text, created_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE documents (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), customer_id uuid NOT NULL REFERENCES users, contractor_phone text NOT NULL, title text NOT NULL, template_code text, object_key text NOT NULL, content_sha256 char(64) NOT NULL, amount_kopecks bigint NOT NULL DEFAULT 0, status text NOT NULL, edo_agreement_version text NOT NULL, created_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE signatures (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), document_id uuid NOT NULL REFERENCES documents, signer_id uuid NOT NULL REFERENCES users, kind text NOT NULL, evidence jsonb NOT NULL, provider_reference text, signed_at timestamptz NOT NULL);
+CREATE TABLE audit_events (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), document_id uuid NOT NULL REFERENCES documents, actor_id uuid, action text NOT NULL, payload_sha256 char(64) NOT NULL, previous_hash char(64), event_hash char(64) NOT NULL UNIQUE, occurred_at timestamptz NOT NULL);
+CREATE TABLE outbox_events (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), aggregate_id uuid NOT NULL, type text NOT NULL, payload jsonb NOT NULL, created_at timestamptz NOT NULL DEFAULT now(), published_at timestamptz);
+CREATE INDEX ON outbox_events (published_at) WHERE published_at IS NULL;
+CREATE TABLE signing_links (token_hash char(64) PRIMARY KEY, document_id uuid NOT NULL REFERENCES documents, expires_at timestamptz NOT NULL, used_at timestamptz);
+CREATE TABLE otp_challenges (subject_hash char(64) PRIMARY KEY, purpose text NOT NULL, code_hash char(64) NOT NULL, attempts smallint NOT NULL DEFAULT 0, expires_at timestamptz NOT NULL, created_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE sessions (token_hash char(64) PRIMARY KEY, user_id uuid NOT NULL REFERENCES users, expires_at timestamptz NOT NULL, created_at timestamptz NOT NULL DEFAULT now(), revoked_at timestamptz);
+CREATE INDEX ON signing_links (expires_at);
+CREATE INDEX ON otp_challenges (expires_at);
+CREATE INDEX ON sessions (user_id, expires_at) WHERE revoked_at IS NULL;

@@ -1,0 +1,56 @@
+openapi: 3.0.3
+info:
+  title: Digital Notary MVP API
+  version: 0.1.0
+paths:
+  /v1/templates:
+    get: {summary: List document templates, responses: {'200': {description: Templates}}}
+  /v1/templates/{code}:
+    get: {summary: Get document template metadata, responses: {'200': {description: Template}}}
+  /v1/billing/plans:
+    get: {summary: List subscription plans, responses: {'200': {description: Subscription plans}}}
+  /v1/billing/subscription:
+    get: {summary: Get the current subscription, responses: {'200': {description: Current subscription}}}
+  /v1/billing/webhook:
+    post: {summary: Apply a HMAC-authenticated subscription update from Billing Service, responses: {'204': {description: Subscription updated}}}
+  /v1/integrations/ukep/callback:
+    post: {summary: Accept an HMAC-authenticated completion callback from the UKEP provider, responses: {'200': {description: Signature completed}}}
+  /v1/documents:
+    post:
+      summary: Create document after accepting the EDO agreement
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/CreateDocument'}}}
+      responses: {'200': {description: Created}}
+    get: {summary: List the current user's documents, parameters: [{name: limit, in: query, schema: {type: integer, maximum: 100}}], responses: {'200': {description: Documents}}}
+  /v1/auth/logout:
+    post: {summary: Revoke the current session, responses: {'204': {description: Logged out}}}
+  /v1/auth/logout-all:
+    post: {summary: Revoke all sessions for the current user, responses: {'204': {description: Logged out everywhere}}}
+  /v1/documents/{id}/send:
+    post: {summary: Generate contractor's one-time signing URL, responses: {'200': {description: Sent}}}
+  /v1/documents/{id}/file:
+    put: {summary: Upload an immutable original file before sending, responses: {'200': {description: Uploaded}}}
+    get: {summary: Download the authorized original file after integrity verification, responses: {'200': {description: File}}}
+  /v1/documents/{id}/evidence:
+    get: {summary: Download document audit and signature evidence, responses: {'200': {description: Evidence package}}}
+  /v1/documents/{id}/evidence/verify:
+    get: {summary: Verify hash-chain integrity, responses: {'200': {description: Verification result}}}
+  /v1/signing/{token}/pep/confirm:
+    post: {summary: Confirm PEP with OTP, responses: {'200': {description: Signed}}}
+  /v1/documents/{id}/ukep/start:
+    post: {summary: Initiate signing in accredited UKEP provider, responses: {'200': {description: Pending}}}
+components:
+  securitySchemes: {bearerAuth: {type: http, scheme: bearer}}
+  schemas:
+    CreateDocument:
+      type: object
+      required: [title, contractorPhone, content, edoAgreementVersion]
+      properties:
+        title: {type: string}
+        template: {type: string, example: gph-contract}
+        contractorPhone: {type: string, example: '+79990000000'}
+        content: {type: string, description: Document body or immutable uploaded-file checksum input}
+        edoAgreementVersion: {type: string, example: '2026-08-01'}
+        amountKopecks: {type: integer, format: int64}

@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: outbox-publisher, namespace: digital-notary}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: outbox-publisher}}
+  template:
+    metadata:
+      labels: {app: outbox-publisher}
+      annotations:
+        vault.hashicorp.com/agent-inject: 'true'
+        vault.hashicorp.com/role: digital-notary-api
+        vault.hashicorp.com/agent-inject-secret-app.env: kv/data/digital-notary/api
+        vault.hashicorp.com/agent-inject-template-app.env: |
+          {{- with secret "kv/data/digital-notary/api" -}}
+          {{- range $k, $v := .Data.data }}{{ $k }}={{ $v }}
+          {{- end }}{{- end }}
+    spec:
+      securityContext: {seccompProfile: {type: RuntimeDefault}}
+      serviceAccountName: document-api
+      containers:
+      - name: publisher
+        image: ghcr.io/replace-me/digital-notary:latest
+        command: ["/outbox-publisher"]
+        env: [{name: VAULT_ENV_FILE, value: /vault/secrets/app.env}]
+        resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: '1', memory: 256Mi}}
+        securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, runAsNonRoot: true}

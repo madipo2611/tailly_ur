@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ResourceQuota
+metadata: {name: digital-notary-workloads, namespace: digital-notary}
+spec:
+  hard:
+    requests.cpu: '12'
+    requests.memory: 24Gi
+    limits.cpu: '24'
+    limits.memory: 48Gi
+    pods: '50'
+---
+apiVersion: v1
+kind: LimitRange
+metadata: {name: digital-notary-defaults, namespace: digital-notary}
+spec:
+  limits:
+  - type: Container
+    defaultRequest: {cpu: 100m, memory: 128Mi}
+    default: {cpu: '1', memory: 512Mi}
