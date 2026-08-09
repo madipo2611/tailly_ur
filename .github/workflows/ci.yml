@@ -1,6 +1,11 @@
 name: CI
-on: [push, pull_request]
-permissions: {contents: read, packages: write, id-token: write}
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+  packages: write
+  id-token: write
 env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/digital-notary
 jobs:
@@ -9,7 +14,10 @@ jobs:
     services:
       postgres:
         image: postgres:16-alpine
-        env: {POSTGRES_DB: digital_notary, POSTGRES_USER: digital_notary, POSTGRES_PASSWORD: test}
+        env:
+          POSTGRES_DB: digital_notary
+          POSTGRES_USER: digital_notary
+          POSTGRES_PASSWORD: test
         ports: ['5432:5432']
         options: >-
           --health-cmd "pg_isready -U digital_notary -d digital_notary"
@@ -17,7 +25,8 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-go@v5
-      with: {go-version: '1.26.x'}
+      with:
+        go-version: '1.26.x'
     - run: go run ./cmd/migrate
       env:
         DATABASE_URL: "postgres://digital_notary:test@localhost:5432/digital_notary?sslmode=disable"
@@ -26,16 +35,23 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-go@v5
-      with: {go-version: '1.26.x'}
+      with:
+        go-version: '1.26.x'
     - run: go mod tidy && git diff --exit-code -- go.mod go.sum
     - run: go test ./...
     - run: go test -race ./...
     - name: Log in to GHCR
       if: github.ref == 'refs/heads/main' && github.event_name == 'push'
       uses: docker/login-action@v3
-      with: {registry: ghcr.io, username: ${{ github.actor }}, password: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     - uses: docker/build-push-action@v6
-      with: {context: '.', push: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}, tags: ${{ env.IMAGE }}:${{ github.sha }}
+      with:
+        context: .
+        push: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+        tags: ${{ env.IMAGE }}:${{ github.sha }}
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     needs: [test-and-build, migrate-check]
