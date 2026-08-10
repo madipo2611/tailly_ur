@@ -1,0 +1,17 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: document-api-external-services
+  namespace: digital-notary
+spec:
+  endpointSelector:
+    matchLabels:
+      app: document-api
+  egress:
+  - toFQDNs:
+    - matchName: s3.regru.cloud
+    - matchPattern: "*.s3.regru.cloud"
+    toPorts:
+    - ports:
+      - port: "443"
+        protocol: TCP
