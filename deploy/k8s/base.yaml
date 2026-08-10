@@ -12,14 +12,6 @@ spec:
   template:
     metadata:
       labels: {app: document-api}
-      annotations:
-        vault.hashicorp.com/agent-inject: 'true'
-        vault.hashicorp.com/role: digital-notary-api
-        vault.hashicorp.com/agent-inject-secret-app.env: kv/data/digital-notary/api
-        vault.hashicorp.com/agent-inject-template-app.env: |
-          {{- with secret "kv/data/digital-notary/api" -}}
-          {{- range $k, $v := .Data.data }}{{ $k }}={{ $v }}
-          {{- end }}{{- end }}
     spec:
       terminationGracePeriodSeconds: 30
       securityContext: {seccompProfile: {type: RuntimeDefault}}
@@ -28,12 +20,22 @@ spec:
       - name: api
         image: ghcr.io/replace-me/digital-notary:latest
         ports: [{containerPort: 8080}]
-        env: [{name: PORT, value: '8080'}, {name: VAULT_ENV_FILE, value: /vault/secrets/app.env}]
+        env: [{name: PORT, value: '8080'}]
+        envFrom: [{secretRef: {name: digital-notary-runtime}}]
+        volumeMounts:
+        - name: postgres-ca
+          mountPath: /etc/digital-notary
+          readOnly: true
         resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: '1', memory: 512Mi}}
         securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, runAsNonRoot: true}
         livenessProbe: {httpGet: {path: /healthz, port: 8080}}
         readinessProbe: {httpGet: {path: /readyz, port: 8080}}
         startupProbe: {httpGet: {path: /healthz, port: 8080}, failureThreshold: 30, periodSeconds: 2}
+      volumes:
+      - name: postgres-ca
+        secret:
+          secretName: digital-notary-runtime
+          items: [{key: postgres-ca.crt, path: postgres-ca.crt}]
 ---
 apiVersion: v1
 kind: Service

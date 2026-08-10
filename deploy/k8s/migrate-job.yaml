@@ -3,14 +3,6 @@ kind: Job
 metadata:
   generateName: digital-notary-migrate-
   namespace: digital-notary
-  annotations:
-    vault.hashicorp.com/agent-inject: 'true'
-    vault.hashicorp.com/role: digital-notary-api
-    vault.hashicorp.com/agent-inject-secret-app.env: kv/data/digital-notary/api
-    vault.hashicorp.com/agent-inject-template-app.env: |
-      {{- with secret "kv/data/digital-notary/api" -}}
-      {{- range $k, $v := .Data.data }}{{ $k }}={{ $v }}
-      {{- end }}{{- end }}
 spec:
   backoffLimit: 2
   ttlSecondsAfterFinished: 86400
@@ -25,5 +17,14 @@ spec:
       - name: migrate
         image: ghcr.io/replace-me/digital-notary:latest
         command: ["/migrate"]
-        env: [{name: VAULT_ENV_FILE, value: /vault/secrets/app.env}]
+        envFrom: [{secretRef: {name: digital-notary-runtime}}]
+        volumeMounts:
+        - name: postgres-ca
+          mountPath: /etc/digital-notary
+          readOnly: true
         securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, runAsNonRoot: true}
+      volumes:
+      - name: postgres-ca
+        secret:
+          secretName: digital-notary-runtime
+          items: [{key: postgres-ca.crt, path: postgres-ca.crt}]

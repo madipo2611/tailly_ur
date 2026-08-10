@@ -1,0 +1,22 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: digital-notary
+  namespace: digital-notary
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: tailly.ru
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend: {service: {name: document-api, port: {number: 80}}}
+  - host: www.tailly.ru
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend: {service: {name: document-api, port: {number: 80}}}

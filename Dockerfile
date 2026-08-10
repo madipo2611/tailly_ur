@@ -11,6 +11,6 @@ COPY --from=build /outbox-publisher /outbox-publisher
 COPY --from=build /notification-worker /notification-worker
 COPY --from=build /notification-dispatcher /notification-dispatcher
 COPY --from=build /cleanup /cleanup
-USER nonroot:nonroot
+USER 65532:65532
 EXPOSE 8080
 ENTRYPOINT ["/api"]
