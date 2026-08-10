@@ -1,6 +1,6 @@
 # Статус проекта «Цифровой нотариус»
 
-Актуально на 2026-08-09.
+Актуально на 2026-08-10.
 
 ## Реализовано
 
@@ -45,8 +45,15 @@
 - Rate limiting API, security headers, CORS allow-list, `Cache-Control: no-store` для API.
 - Correlation ID, `/healthz`, `/readyz`, `/metrics`, structured HTTP logs.
 - Graceful shutdown, PostgreSQL pool settings.
-- Kubernetes: Vault Agent, NetworkPolicy для API, probes, HPA, PDB, resource quota, LimitRange, seccomp, non-root/read-only containers.
+- Kubernetes: Secrets для runtime-конфигурации, NetworkPolicy для API, probes, HPA, PDB, resource quota, LimitRange, seccomp, non-root/read-only containers.
 - CI: unit/smoke/race tests, `go vet`, dependency sync, PostgreSQL migration check, immutable GHCR SHA images and rollout.
+
+### Развёрнутый контур
+
+- `document-api` развёрнут в namespace `digital-notary`: 3 реплики готовы, PostgreSQL работает внутри Kubernetes на постоянном томе 10 GiB.
+- Схема БД применена отдельным migration Job; доступ API к БД ограничен pod-сетью и ролью `digital_notary`.
+- Ingress опубликован через балансировщик `89.108.100.190`; проверка `/healthz` и `/readyz` через него возвращает HTTP 200.
+- Конфигурация приложения хранится в Kubernetes Secrets. Внешний доступ API к объектному хранилищу ограничен Cilium FQDN-политикой только для `s3.regru.cloud`.
 
 ## Требует внешних интеграций
 
@@ -57,18 +64,19 @@
 - Аккредитованный оператор/провайдер УКЭП: API старта подписи, callback contract, callback secret, сертификатная/OCSP policy.
 - Изолированный object-storage gateway: URL, token/mTLS, lifecycle/retention, backup/restore.
 - Billing/эквайринг: платёжный провайдер и HMAC event contract.
-- Production доступы к PostgreSQL, Kafka, RabbitMQ, Vault и Kubernetes.
+- Production-интеграции Kafka и RabbitMQ, когда будут включены фоновые обработчики.
 
 ## Остаётся реализовать до production-пилота
 
 1. Подключить реальные OIDC, SMS, УКЭП, storage и Billing integrations в staging.
-2. Реализовать PDF Generator Service: утверждённые шаблоны, кириллические шрифты, статический архивный evidence PDF; визуально проверить рендер.
-3. Добавить email-канал уведомлений и delivery reports/SMS retry-DLQ policy.
-4. Сделать cursor pagination, фильтры и поиск в личном кабинете; подключить их к веб-интерфейсу.
-5. Добавить integration tests с PostgreSQL, Kafka, RabbitMQ и object-storage gateway, а также нагрузочные и отказоустойчивые тесты.
-6. Настроить production monitoring/alerting: 5xx, readiness, DB pool, outbox lag, Kafka consumer lag, глубина RabbitMQ и ошибки delivery.
-7. Проверить backup/restore PostgreSQL и object storage, провести staging-пилот с 20–30 компаниями.
-8. Провести юридическую экспертизу соглашения ЭДО и финальных текстов шаблонов. Техническая реализация ПЭП не заменяет такую экспертизу.
+2. Изменить DNS-записи `A` для `tailly.ru` и `www.tailly.ru` на `89.108.100.190`; после распространения DNS выпустить TLS-сертификат.
+3. Реализовать PDF Generator Service: утверждённые шаблоны, кириллические шрифты, статический архивный evidence PDF; визуально проверить рендер.
+4. Добавить email-канал уведомлений и delivery reports/SMS retry-DLQ policy.
+5. Сделать cursor pagination, фильтры и поиск в личном кабинете; подключить их к веб-интерфейсу.
+6. Добавить integration tests с PostgreSQL, Kafka, RabbitMQ и object-storage gateway, а также нагрузочные и отказоустойчивые тесты.
+7. Настроить production monitoring/alerting: 5xx, readiness, DB pool, outbox lag, Kafka consumer lag, глубина RabbitMQ и ошибки delivery.
+8. Проверить backup/restore PostgreSQL и object storage, провести staging-пилот с 20–30 компаниями.
+9. Провести юридическую экспертизу соглашения ЭДО и финальных текстов шаблонов. Техническая реализация ПЭП не заменяет такую экспертизу.
 
 ## Команды проверки
 
