@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata: {name: digital-notary-postgres-data}
+spec:
+  capacity: {storage: 10Gi}
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: manual
+  hostPath: {path: /var/lib/digital-notary-postgres, type: DirectoryOrCreate}
+  nodeAffinity:
+    required:
+      nodeSelectorTerms: [{matchExpressions: [{key: kubernetes.io/hostname, operator: In, values: [k8s7812659-az1-md1-r9lvc-rjbqv]}]}]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: postgres-data, namespace: digital-notary}
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: manual
+  resources: {requests: {storage: 10Gi}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: postgres, namespace: digital-notary}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: postgres}}
+  template:
+    metadata: {labels: {app: postgres}}
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:16-alpine
+        envFrom: [{secretRef: {name: postgres-auth}}]
+        ports: [{containerPort: 5432}]
+        volumeMounts: [{name: data, mountPath: /var/lib/postgresql/data}]
+        livenessProbe: {exec: {command: [sh, -c, pg_isready -U digital_notary -d digital_notary]}, initialDelaySeconds: 15}
+      volumes: [{name: data, persistentVolumeClaim: {claimName: postgres-data}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: postgres, namespace: digital-notary}
+spec: {selector: {app: postgres}, ports: [{port: 5432, targetPort: 5432}]}
