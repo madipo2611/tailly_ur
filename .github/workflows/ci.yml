@@ -59,13 +59,24 @@ jobs:
     environment: production
     steps:
     - uses: actions/checkout@v4
-    - name: Authenticate to Kubernetes with OIDC
+    - name: Configure Kubernetes access
+      env:
+        KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
       run: |
-        # Configure cloud-specific workload identity here; do not store kubeconfig in GitHub secrets.
+        test -n "$KUBE_CONFIG_DATA" || { echo "KUBE_CONFIG_DATA GitHub secret is required"; exit 1; }
+        mkdir -p "$HOME/.kube"
+        echo "$KUBE_CONFIG_DATA" | base64 --decode > "$HOME/.kube/config"
+        chmod 600 "$HOME/.kube/config"
+        kubectl version --client
+    - name: Migrate and deploy
+      run: |
         kubectl create namespace digital-notary --dry-run=client -o yaml | kubectl apply -f -
+        kubectl -n digital-notary delete job -l app=digital-notary-migrate --ignore-not-found
         sed "s#ghcr.io/replace-me/digital-notary:latest#${IMAGE}:${GITHUB_SHA}#g" deploy/k8s/migrate-job.yaml | kubectl create -f -
         kubectl wait --for=condition=complete job -l app=digital-notary-migrate -n digital-notary --timeout=5m
         kubectl apply -f deploy/k8s/base.yaml
+        kubectl apply -f deploy/k8s/api-egress.yaml
+        kubectl apply -f deploy/k8s/ingress.yaml
         kubectl apply -f deploy/k8s/availability.yaml
         kubectl apply -f deploy/k8s/resource-guards.yaml
         kubectl apply -f deploy/k8s/outbox-publisher.yaml
