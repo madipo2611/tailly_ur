@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"digital-notary/internal/auth"
 	"digital-notary/internal/httpapi"
 	"digital-notary/internal/persistence"
 	"digital-notary/internal/service"
@@ -62,8 +63,12 @@ func main() {
 		defer pool.Close()
 		state = persistence.NewRepository(pool)
 	}
-	app := service.NewAppWithPersistence(os.Getenv("SIGNING_URL_BASE"), os.Getenv("SMS_DEV_CODE"), objects, state)
-	api := httpapi.New(app)
+	app := service.NewAppWithPersistence(os.Getenv("SIGNING_URL_BASE"), "", objects, state)
+	sber, err := auth.NewSberFromEnv()
+	if err != nil {
+		log.Fatal(err)
+	}
+	api := httpapi.New(app, sber)
 	allowedOrigins := map[string]bool{}
 	for _, origin := range strings.Split(os.Getenv("CORS_ALLOWED_ORIGINS"), ",") {
 		if origin = strings.TrimSpace(origin); origin != "" {

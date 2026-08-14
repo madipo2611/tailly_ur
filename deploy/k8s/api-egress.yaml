@@ -11,6 +11,8 @@ spec:
   - toFQDNs:
     - matchName: s3.regru.cloud
     - matchPattern: "*.s3.regru.cloud"
+    - matchName: id.sber.ru
+    - matchName: oauth-ift.sber.ru
     toPorts:
     - ports:
       - port: "443"

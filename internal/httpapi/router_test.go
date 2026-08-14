@@ -9,7 +9,8 @@ import (
 )
 
 func TestCreateAndSendDocumentOverHTTP(t *testing.T) {
-	h := New(service.NewApp("", "000000"))
+	app := service.NewApp("", "")
+	h := New(app, nil)
 	call := func(method, path, token string, payload any) *httptest.ResponseRecorder {
 		var body *bytes.Reader
 		if payload == nil {
@@ -27,23 +28,18 @@ func TestCreateAndSendDocumentOverHTTP(t *testing.T) {
 		h.ServeHTTP(w, r)
 		return w
 	}
-	if w := call("POST", "/v1/auth/sms/request", "", map[string]string{"phone": "+79990000000"}); w.Code != 200 {
-		t.Fatalf("request otp: %d", w.Code)
+	token, err := app.CreateSession("+79990000000")
+	if err != nil {
+		t.Fatal(err)
 	}
-	w := call("POST", "/v1/auth/sms/verify", "", map[string]string{"phone": "+79990000000", "code": "000000"})
-	if w.Code != 200 {
-		t.Fatalf("verify: %d", w.Code)
-	}
-	var login map[string]string
-	json.NewDecoder(w.Body).Decode(&login)
-	w = call("POST", "/v1/documents", login["accessToken"], map[string]any{"title": "Акт", "template": "act", "contractorPhone": "+79991111111", "content": "Работы выполнены", "edoAgreementVersion": "v1", "amountKopecks": 10000})
+	w := call("POST", "/v1/documents", token, map[string]any{"title": "Акт", "template": "act", "contractorPhone": "+79991111111", "content": "Работы выполнены", "edoAgreementVersion": "v1", "amountKopecks": 10000})
 	if w.Code != 200 {
 		t.Fatalf("create: %d %s", w.Code, w.Body.String())
 	}
 	var document map[string]any
 	json.NewDecoder(w.Body).Decode(&document)
 	id := document["ID"].(string)
-	w = call("POST", "/v1/documents/"+id+"/send", login["accessToken"], nil)
+	w = call("POST", "/v1/documents/"+id+"/send", token, nil)
 	if w.Code != 200 {
 		t.Fatalf("send: %d %s", w.Code, w.Body.String())
 	}

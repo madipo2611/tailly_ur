@@ -70,3 +70,7 @@ CI публикует production-образ в GHCR только из `main` и 
 Текущая версия уже ограничивает срок жизни сессии (24 часа), подписной ссылки (48 часов) и каждого OTP (10 минут). В production эти записи переносятся из памяти в PostgreSQL/Redis.
 
 Для production сервисы выделяются из этого MVP в Auth, Document, Signing, Notification и PDF Generator. Изменения статусов публикуются через transactional outbox в Kafka; фоновые задачи — в RabbitMQ.
+
+## Сбер ID
+
+Демо-авторизация отключена. Вход запускается через `GET /v1/auth/sber/start` и завершается callback-ом `https://tailly.ru/v1/auth/sber/callback`. Реализация использует authorization-code flow, PKCE, `state`/`nonce`, проверку подписи ID token по JWKS и HttpOnly-сессию. Для включения production-входа заполните в Kubernetes Secret параметры `SBER_ID_*` и `OIDC_STATE_HMAC_KEY` из партнёрского кабинета Сбер ID; список находится в `.env.example`.

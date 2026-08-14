@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"digital-notary/internal/auth"
 	"digital-notary/internal/billing"
 	"digital-notary/internal/service"
 	"digital-notary/internal/templates"
@@ -17,7 +18,7 @@ import (
 	"time"
 )
 
-func New(a *service.App) http.Handler {
+func New(a *service.App, sber *auth.Sber) http.Handler {
 	m := http.NewServeMux()
 	metrics := &metrics{}
 	m.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { reply(w, 200, map[string]string{"status": "ok"}) })
@@ -82,27 +83,54 @@ func New(a *service.App) http.Handler {
 		}
 		reply(w, http.StatusOK, map[string]any{"subscription": subscription})
 	})
-	m.HandleFunc("POST /v1/auth/sms/request", func(w http.ResponseWriter, r *http.Request) {
-		var x struct{ Phone string }
-		if err := json.NewDecoder(r.Body).Decode(&x); err != nil {
-			respond(w, nil, err)
+	m.HandleFunc("GET /v1/auth/providers", func(w http.ResponseWriter, r *http.Request) {
+		reply(w, http.StatusOK, map[string]any{"providers": map[string]bool{"sber": sber != nil}})
+	})
+	m.HandleFunc("GET /v1/auth/me", func(w http.ResponseWriter, r *http.Request) {
+		actor := user(a, r)
+		if actor == "" {
+			reply(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 			return
 		}
-		code, e := a.RequestLogin(x.Phone)
-		respond(w, map[string]string{"developmentCode": code}, e)
+		reply(w, http.StatusOK, map[string]string{"phone": actor, "provider": "sber"})
 	})
-	m.HandleFunc("POST /v1/auth/sms/verify", func(w http.ResponseWriter, r *http.Request) {
-		var x struct{ Phone, Code string }
-		json.NewDecoder(r.Body).Decode(&x)
-		token, e := a.VerifyLogin(x.Phone, x.Code)
-		respond(w, map[string]string{"accessToken": token}, e)
+	m.HandleFunc("GET /v1/auth/sber/start", func(w http.ResponseWriter, r *http.Request) {
+		if sber == nil {
+			reply(w, http.StatusServiceUnavailable, map[string]string{"error": "Sber ID is not configured"})
+			return
+		}
+		if err := sber.Start(w, r); err != nil {
+			respond(w, nil, err)
+		}
 	})
-	m.HandleFunc("POST /v1/auth/logout", func(w http.ResponseWriter, r *http.Request) {
-		err := a.Logout(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+	m.HandleFunc("GET /v1/auth/sber/callback", func(w http.ResponseWriter, r *http.Request) {
+		if sber == nil {
+			reply(w, http.StatusServiceUnavailable, map[string]string{"error": "Sber ID is not configured"})
+			return
+		}
+		phone, returnTo, err := sber.Complete(w, r)
 		if err != nil {
 			respond(w, nil, err)
 			return
 		}
+		token, err := a.CreateSession(phone)
+		if err != nil {
+			respond(w, nil, err)
+			return
+		}
+		http.SetCookie(w, &http.Cookie{Name: "nota_session", Value: token, Path: "/", MaxAge: 86400, Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode})
+		if returnTo == "" {
+			returnTo = "/"
+		}
+		http.Redirect(w, r, returnTo, http.StatusFound)
+	})
+	m.HandleFunc("POST /v1/auth/logout", func(w http.ResponseWriter, r *http.Request) {
+		err := a.Logout(sessionToken(r))
+		if err != nil {
+			respond(w, nil, err)
+			return
+		}
+		http.SetCookie(w, &http.Cookie{Name: "nota_session", Value: "", Path: "/", MaxAge: -1, Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode})
 		reply(w, http.StatusNoContent, nil)
 	})
 	m.HandleFunc("POST /v1/auth/logout-all", func(w http.ResponseWriter, r *http.Request) {
@@ -239,7 +267,16 @@ func New(a *service.App) http.Handler {
 	return withObservability(withRateLimit(m), metrics)
 }
 func user(a *service.App, r *http.Request) string {
-	return a.User(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+	return a.User(sessionToken(r))
+}
+func sessionToken(r *http.Request) string {
+	if bearer := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "); bearer != "" {
+		return bearer
+	}
+	if c, err := r.Cookie("nota_session"); err == nil {
+		return c.Value
+	}
+	return ""
 }
 func reply(w http.ResponseWriter, c int, v any) {
 	w.Header().Set("Content-Type", "application/json")

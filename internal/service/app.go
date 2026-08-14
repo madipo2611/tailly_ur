@@ -154,6 +154,21 @@ func (a *App) VerifyLogin(phone, code string) (string, error) {
 		return "", errors.New("invalid OTP")
 	}
 	delete(a.loginChallenges, phone)
+	return a.createSessionLocked(phone)
+}
+
+// CreateSession issues an application session only for a phone number verified
+// by an external identity provider. It intentionally has no development fallback.
+func (a *App) CreateSession(phone string) (string, error) {
+	phone = normalizePhone(phone)
+	if !validPhone(phone) {
+		return "", errors.New("verified Russian mobile phone is required")
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.createSessionLocked(phone)
+}
+func (a *App) createSessionLocked(phone string) (string, error) {
 	token := newID()
 	a.sessions[token] = session{userID: phone, expiresAt: time.Now().UTC().Add(24 * time.Hour)}
 	if a.persistence != nil {
